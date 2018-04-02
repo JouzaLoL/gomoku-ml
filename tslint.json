@@ -1,0 +1,66 @@
+{
+	"extends": [
+		"tslint:recommended",
+		"tslint-no-unused-expression-chai"
+	],
+	"rules": {
+		"object-literal-sort-keys": false,
+		"no-inferrable-types": true,
+		"no-reference": true,
+		"new-parens": true,
+		"no-arg": true,
+		"no-bitwise": true,
+		"no-conditional-assignment": true,
+		"no-consecutive-blank-lines": true,
+		"semicolon": [
+			true,
+			"always"
+		],
+		"linebreak-style": [
+			true,
+			"CRLF"
+		],
+		"indent": [
+			true,
+			"tabs",
+			2
+		],
+		"typedef": false,
+		"no-import-side-effect": false,
+		"no-invalid-this": false,
+		"align": false,
+		"max-classes-per-file": false,
+		"no-unsafe-any": false,
+		"no-use-before-declare": false,
+		"strict-boolean-expressions": false,
+		"no-require-imports": false,
+		"no-namespace": false,
+		"ordered-imports": false,
+		"comment-format": [
+			true,
+			"check-space",
+			"check-uppercase",
+			{
+				"ignore-words": [
+					"TODO",
+					"HACK"
+				]
+			}
+		],
+		"trailing-comma": false,
+		"no-trailing-whitespace": true,
+		"max-line-length": false,
+		"space-before-function-paren": false,
+		"no-unused-variable": true
+	},
+	"jsRules": {
+		"indent": [
+			true,
+			"tabs",
+			2
+		],
+		"trailing-comma": false,
+		"object-literal-sort-keys": false
+	},
+	"defaultSeverity": "warning"
+}

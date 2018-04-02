@@ -1,0 +1,9 @@
+.row {
+    width: 200px;
+}
+
+.col {
+    width: 15px;
+    height: 15px;
+    outline: solid 1px black;
+}
