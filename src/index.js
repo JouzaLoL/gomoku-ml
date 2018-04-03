@@ -10,7 +10,7 @@ Vector.prototype.absVector = function () {
 };
 
 Vector.prototype.equals = function (anotherVector) {
-	const [x, y] = [this.x, this.y];
+	const [x, y] = [anotherVector.x, anotherVector.y];
 	return this.x === x && this.y === y;
 };
 
@@ -118,12 +118,6 @@ class Board {
 		}
 	}
 
-	findMove(x, y) {
-		return this.moves.find((move) => {
-			return move.x === x && move.y === y;
-		}) || new Move(-1, -1, "");
-	}
-
 	render() {
 		return this.renderBoard().concat(this.renderStats());
 	}
@@ -134,9 +128,9 @@ class Board {
             <div class="cp">
                 <b>Current player:</b>
                 <span class="cp ${this.currentPlayer}">${this.currentPlayer}</span>
-            </div>
-        <table class="moves">
+			</div>
             <b>Moves:</b>
+        	<table class="moves">
             <thead>
                 <th>#</th>
                 <th>Player</th>
@@ -264,7 +258,7 @@ class App {
 			});
 	}
 
-	loadBoard(board) {
+	async loadBoard(board) {
 		this.board = Object.assign(new Board(), {
 			...board,
 			moves: [
@@ -273,7 +267,9 @@ class App {
 				})
 			]
 		});
-		this.render();
+		await this.render();
+		const lastMove = this.board.moves[this.board.moves.length-1];
+		this.board.checkWin(lastMove.x, lastMove.y, lastMove.p);
 	}
 
 	async saveCurrentBoard(name) {
