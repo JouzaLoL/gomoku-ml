@@ -16,11 +16,8 @@ Vector.prototype.equals = function (anotherVector) {
 
 import brain from 'brain.js/src/index';
 
-/**
- * 
- * 
- * @class Board
- */
+import * as localforage from "localforage";
+
 class Board {
     /**
      * Creates an instance of Board.
@@ -32,6 +29,7 @@ class Board {
 		this.size = size;
 		this.winner = undefined;
 		this.currentPlayer = startingPlayer;
+		this.name = "";
 	}
 
 	addMove(m) {
@@ -195,11 +193,34 @@ class App {
 		this.board = board;
 
 		// First render
-		this.renderBoard();
+		this.render();
 	}
 
-	renderBoard() {
-		document.querySelector(this.target).innerHTML = this.board.render();
+	async render() {
+		let html = "";
+
+		const savedBoards = await this.getSavedBoards() || [];
+		html += `
+		<div class="boardSelector">
+		<select name="boards" id="boards">
+		${savedBoards.map((board, index) => {
+				return `<option id="${index}">${board.name}</option>`;
+			})}
+		</select>
+		<input type="button" value="Load" id="loadButton">
+		</div>
+		`;
+
+		html += `
+		<div class="boardSaver">
+		<input type="text" name="boardSaver" id="saveName">
+		<input type="button" value="Save" id="saveButton">
+		</div>
+		`;
+
+		html += this.board.render();
+
+		document.querySelector(this.target).innerHTML = html;
 		this.registerEventHandlers();
 	}
 
@@ -213,8 +234,58 @@ class App {
 		function onClickCol(col, app) {
 			const [x, y] = [col.getAttribute("x"), col.getAttribute("y")];
 			app.board.addMove(new Move(x, y, app.board.currentPlayer));
-			app.renderBoard();
+			app.render();
 		}
+
+		document
+			.querySelector("#saveButton")
+			.addEventListener("click", async () => {
+				await this.saveCurrentBoard(
+					document
+						.querySelector("#saveName")
+						.value
+				);
+				this.render();
+			});
+
+		document
+			.querySelector("#loadButton")
+			.addEventListener("click", async () => {
+				const value = document
+					.querySelector("select#boards")
+					.value;
+
+				const boards = await this.getSavedBoards();
+				const boardToLoad = boards.find((b) => {
+					return b.name === value;
+				});
+
+				this.loadBoard(boardToLoad);
+			});
+	}
+
+	loadBoard(board) {
+		this.board = Object.assign(new Board(), {
+			...board,
+			moves: [
+				...board.moves.map((move) => {
+					return new Move(move.x, move.y, move.p);
+				})
+			]
+		});
+		this.render();
+	}
+
+	async saveCurrentBoard(name) {
+		const key = "savedBoards";
+		const savedBoards = await localforage.getItem(key) || [];
+		const boardToSave = Object.assign(this.board, { name });
+		await localforage.setItem(key, [...savedBoards, boardToSave]);
+	}
+
+	async getSavedBoards() {
+		const key = "savedBoards";
+		return await localforage.getItem(key);
 	}
 }
 
