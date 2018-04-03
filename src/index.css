@@ -20,17 +20,28 @@ table#board {
 }
 
 #board td.x {
-    background-color: #2779D9;
+    background: url(img/cross.svg);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
 }
 
 #board td.o {
-    background-color: red;
+    background: url(img/circle.svg);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+
+#board td.wincol {
+    background-color: greenyellow;
 }
 
 /* Stats */
 
 div#stats {
-    float: right;
+    display: inline-block;
+    margin-left: 5px;
 }
 
 /* Moves */
@@ -41,13 +52,23 @@ table.moves {
 
 table.moves tr {
     border: solid 1px black;
-    padding: 2px;
     text-align: center;
 }
 
 table.moves td, table.moves th {
     border: solid 1px black;
     text-align: center;
+    padding: 3px;
+}
+
+table.moves tr.winmove {
+    font-weight: bold;
+    background-color: greenyellow;
+}
+
+table.moves td.player {
+    font-weight: bold;
+    text-transform: uppercase;
 }
 
 /* Current player */
@@ -56,10 +77,11 @@ span.cp {
     font-weight: bold;
     text-transform: uppercase;
 }
-span.x {
+
+span.x, td.x {
     color: #2779D9;
 }
 
-span.o {
+span.o, td.o {
     color: red;
 }

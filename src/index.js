@@ -1,5 +1,7 @@
 import './index.html';
 import "./index.css";
+import "./img/circle.svg";
+import "./img/cross.svg";
 
 import Vector from "victor";
 Vector.prototype.absVector = function () {
@@ -14,11 +16,6 @@ Vector.prototype.equals = function (anotherVector) {
 
 import brain from 'brain.js/src/index';
 
-const net = new brain.NeuralNetwork({
-	hiddenLayers: 16,
-	log: true
-});
-
 /**
  * 
  * 
@@ -30,15 +27,18 @@ class Board {
      * @param {number} size 
      * @memberof Board
      */
-	constructor(size = 16, target = "#app") {
-		this.target = target;
+	constructor(size = 16, startingPlayer = "x") {
 		this.moves = [];
-		this.winner = undefined;
 		this.size = size;
-		this.render(target);
+		this.winner = undefined;
+		this.currentPlayer = startingPlayer;
 	}
 
 	addMove(m) {
+		// Update the current player
+		const cp = this.currentPlayer;
+		this.currentPlayer = this.currentPlayer === "x" ? "o" : "x";
+
 		// Don't mark already occupied col
 		if (
 			this.moves.some((move) => {
@@ -57,11 +57,7 @@ class Board {
 		this.checkWin(m.x, m.y, m.p);
 
 		// Log the move
-		console.log(`Player ${state.currentPlayer} clicked ${m.x}:${m.y}`);
-
-		// Trigger render
-		this.render(this.target);
-		registerEventHandlers();
+		console.log(`Player ${this.currentPlayer} clicked ${m.x}:${m.y}`);
 	}
 
 	checkWin(x, y, p) {
@@ -130,19 +126,8 @@ class Board {
 		}) || new Move(-1, -1, "");
 	}
 
-    /**
-     * 
-     * 
-     * @returns void
-     * @memberof Board
-     */
-	render(target) {
-		const html = this.renderBoard().concat(this.renderStats())
-		document.querySelector(target).innerHTML = html;
-
-		if (this.winner) {
-			alert(this.winner);
-		}
+	render() {
+		return this.renderBoard().concat(this.renderStats());
 	}
 
 	renderStats() {
@@ -150,24 +135,22 @@ class Board {
         <div id="stats">
             <div class="cp">
                 <b>Current player:</b>
-                <span class="cp ${state.currentPlayer}">${state.currentPlayer}</span>
+                <span class="cp ${this.currentPlayer}">${this.currentPlayer}</span>
             </div>
         <table class="moves">
             <b>Moves:</b>
             <thead>
                 <th>#</th>
                 <th>Player</th>
-                <th>X</th>
-                <th>Y</th>
+                <th>Coords</th>
 			</thead>
 			<tbody>
            ${this.moves.map((move, index) => {
 				return `
-			   <tr class="move">
+			   <tr class="move ${this.winner === move.p ? "winmove" : ''}">
 				   <td class="number">${index}</td>
-				   <td class="player">${move.p}</td>
-				   <td class="x">${move.x}</td>
-				   <td class="y">${move.y}</td>
+				   <td class="player ${move.p}">${move.p}</td>
+				   <td class="coords">[${move.x}, ${move.y}]</td>
 			   </tr>
 		   `;
 			})}
@@ -185,7 +168,7 @@ class Board {
 					.find((move) => {
 						return move.x === x && move.y === y;
 					});
-				return `<td class="col ${move ? move.p : ''}" x="${x}" y="${y}"></td>`;
+				return `<td class="col ${move ? move.p : ''} ${this.winner && move && this.winner === move.p ? "wincol" : ''}" x="${x}" y="${y}"></td>`;
 			});
 			return `<tr class="row">${cols.join("")}</tr>`;
 		});
@@ -196,6 +179,7 @@ class Board {
 		 </table>`;
 	}
 }
+
 class Move {
 	constructor(x, y, p = "x") {
 		this.x = parseInt(x);
@@ -204,29 +188,34 @@ class Move {
 	}
 }
 
-function registerEventHandlers() {
-	document.querySelectorAll("td.col ").forEach((col) => {
-		col.addEventListener("click", onClickCol);
-	});
 
-	function onClickCol() {
-		const [x, y] = [this.getAttribute("x"), this.getAttribute("y")]
+class App {
+	constructor(target, board) {
+		this.target = target;
+		this.board = board;
 
-		const cp = state.currentPlayer;
+		// First render
+		this.renderBoard();
+	}
 
-		// Update the state to next player
-		state.currentPlayer = state.currentPlayer === "x" ? "o" : "x";
+	renderBoard() {
+		document.querySelector(this.target).innerHTML = this.board.render();
+		this.registerEventHandlers();
+	}
 
-		// Add the move to board moves list
-		state.board.addMove(new Move(x, y, cp));
+	registerEventHandlers() {
+		document.querySelectorAll("td.col").forEach((col) => {
+			col.addEventListener("click", (event) => {
+				onClickCol(event.target, this);
+			});
+		});
+
+		function onClickCol(col, app) {
+			const [x, y] = [col.getAttribute("x"), col.getAttribute("y")];
+			app.board.addMove(new Move(x, y, app.board.currentPlayer));
+			app.renderBoard();
+		}
 	}
 }
 
-
-const state = {
-	currentPlayer: "x",
-	board: null
-};
-
-state.board = new Board(16, "#app");
-registerEventHandlers();
+const app = new App("#app", new Board(16));

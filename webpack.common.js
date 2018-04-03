@@ -27,13 +27,13 @@ module.exports = {
 				exclude: [/node_modules/],
 			},
 			{
-				test: /\.(html)$/,
+				test: /\.(html|svg)$/,
 				use: [{
 					loader: "file-loader",
 					options: {
 						context: path.resolve(__dirname, "src"),
 						outputPath: "",
-						name: "[name].[ext]",
+						name: "[path][name].[ext]",
 					}
 				}]
 			},
