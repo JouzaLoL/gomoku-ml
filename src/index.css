@@ -1,9 +1,65 @@
-.row {
+* {
+    font-family: "Calibri";
+}
+
+/* Board */
+
+table#board {
+    float: left;
+}
+
+#board tr.row {
     width: 200px;
 }
 
-.col {
+#board td.col {
     width: 15px;
     height: 15px;
     outline: solid 1px black;
+    padding: 3px 3px;
+}
+
+#board td.x {
+    background-color: #2779D9;
+}
+
+#board td.o {
+    background-color: red;
+}
+
+/* Stats */
+
+div#stats {
+    float: right;
+}
+
+/* Moves */
+
+table.moves {
+    border-collapse: collapse;
+}
+
+table.moves tr {
+    border: solid 1px black;
+    padding: 2px;
+    text-align: center;
+}
+
+table.moves td, table.moves th {
+    border: solid 1px black;
+    text-align: center;
+}
+
+/* Current player */
+
+span.cp {
+    font-weight: bold;
+    text-transform: uppercase;
+}
+span.x {
+    color: #2779D9;
+}
+
+span.o {
+    color: red;
 }
