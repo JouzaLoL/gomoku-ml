@@ -15,7 +15,6 @@ Vector.prototype.equals = function (anotherVector) {
 };
 
 import brain from 'brain.js/src/index';
-
 import * as localforage from "localforage";
 
 class Board {
@@ -30,6 +29,23 @@ class Board {
 		this.winner = undefined;
 		this.currentPlayer = startingPlayer;
 		this.name = "";
+
+		// Win callback
+		this.onWin = () => { };
+	}
+
+	toJSON() {
+		return JSON.stringify({
+			moves: this.moves,
+			winner: this.winner
+		});
+	}
+
+	toObject() {
+		return {
+			moves: this.moves,
+			winner: this.winner
+		};
 	}
 
 	addMove(m) {
@@ -39,12 +55,11 @@ class Board {
 
 		// Don't mark already occupied col
 		if (
-			this.moves.some((move) => {
-				return move.x === m.x && move.y === m.y;
-			})
+			this.moves.some((move) => move.x === m.x && move.y === m.y)
 		) {
 			return;
-		} else if (this.winner) {
+		} // Freeze if game ended
+		else if (this.winner) {
 			return;
 		}
 
@@ -52,13 +67,15 @@ class Board {
 		this.moves.push(m);
 
 		// Determine win
-		this.checkWin(m.x, m.y, m.p);
+		this.checkWin(m);
 
 		// Log the move
 		console.log(`Player ${this.currentPlayer} clicked ${m.x}:${m.y}`);
 	}
 
-	checkWin(x, y, p) {
+	checkWin(lastMove = this.moves[this.moves.size]) {
+		const { x, y, p } = lastMove;
+
 		const ownMoves = this.moves
 			.filter((move) => move.p === p);
 
@@ -108,6 +125,7 @@ class Board {
 
 		if (hasWon) {
 			this.winner = p;
+			this.onWin(p);
 		}
 
 		function isBetween(pointA, pointB, pointBetween) {
@@ -186,8 +204,16 @@ class App {
 		this.target = target;
 		this.board = board;
 
+		this.key = "savedBoards";
+
 		// First render
 		this.render();
+
+		// Auto save on game end
+		this.board.onWin = async (player) => {
+			await this.saveCurrentBoard(new Date().toJSON());
+			this.render();
+		};
 	}
 
 	async render() {
@@ -231,6 +257,7 @@ class App {
 			app.render();
 		}
 
+		// Saving
 		document
 			.querySelector("#saveButton")
 			.addEventListener("click", async () => {
@@ -242,6 +269,7 @@ class App {
 				this.render();
 			});
 
+		// Loading
 		document
 			.querySelector("#loadButton")
 			.addEventListener("click", async () => {
@@ -268,21 +296,21 @@ class App {
 			]
 		});
 		await this.render();
-		const lastMove = this.board.moves[this.board.moves.length-1];
+		const lastMove = this.board.moves[this.board.moves.length - 1];
 		this.board.checkWin(lastMove.x, lastMove.y, lastMove.p);
 	}
 
 	async saveCurrentBoard(name) {
-		const key = "savedBoards";
-		const savedBoards = await localforage.getItem(key) || [];
-		const boardToSave = Object.assign(this.board, { name });
-		await localforage.setItem(key, [...savedBoards, boardToSave]);
+		const savedBoards = await localforage.getItem(this.key) || [];
+		const boardToSave = Object.assign(this.board.toObject(), { name });
+		await localforage.setItem(this.key, [...savedBoards, boardToSave]);
 	}
 
 	async getSavedBoards() {
-		const key = "savedBoards";
-		return await localforage.getItem(key);
+		return await localforage.getItem(this.key);
 	}
+
+	// TODO: add saved boards display - table, with option to load or delete
 }
 
 const app = new App("#app", new Board(16));
