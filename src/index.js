@@ -228,6 +228,7 @@ class App {
 			})}
 		</select>
 		<input type="button" value="Load" id="loadButton">
+		<input type="button" value="Delete" id="deleteButton">
 		</div>
 		`;
 
@@ -284,6 +285,18 @@ class App {
 
 				this.loadBoard(boardToLoad);
 			});
+
+		// Deleting
+		document
+			.querySelector("#deleteButton")
+			.addEventListener("click", async () => {
+				const value = document
+					.querySelector("select#boards")
+					.value;
+
+				this.deleteBoard(value);
+				this.render();
+			});
 	}
 
 	async loadBoard(board) {
@@ -304,6 +317,13 @@ class App {
 		const savedBoards = await localforage.getItem(this.key) || [];
 		const boardToSave = Object.assign(this.board.toObject(), { name });
 		await localforage.setItem(this.key, [...savedBoards, boardToSave]);
+	}
+
+	async deleteBoard(name) {
+		const savedBoards = await localforage.getItem(this.key) || [];
+		const updatedBoards = savedBoards.filter((board) => board.name !== name);
+		await localforage.setItem(this.key, updatedBoards);
+		await this.render();
 	}
 
 	async getSavedBoards() {
