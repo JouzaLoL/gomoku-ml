@@ -5,19 +5,25 @@ import { cartesianProduct } from "js-combinatorics";
 import { Move, Player, Board } from "./index";
 
 export class Learner {
-	private brain: any;
+	private brainX: any;
+	private brainO: any;
 	constructor() {
-		this.brain = new brain.NeuralNetwork();
+		this.brainX = new brain.NeuralNetwork();
+		this.brainO = new brain.NeuralNetwork();
 	}
-	public train(board: Board) {
-		this.brain.train(Converter.labelMoves(board), { log: true });
+
+	public async train(board: Board) {
+		await this.brainO.trainAsync(Converter.labelMoves(board, Player.O), { log: true });
+		await this.brainX.trainAsync(Converter.labelMoves(board, Player.X), { log: true });
 	}
 
 	public nextMove(board: Board): Move {
+		const currentBrain = board.currentPlayer === Player.X ? this.brainX : this.brainO;
 		const possibleMoves = Generator
 			.possibleMoves(board);
+
 		// Network has not yet been trained, select random move
-		if (!this.brain.isRunnable) {
+		if (!currentBrain.weights) {
 			return Generator.randomItem(possibleMoves);
 		} else {
 			// Assign weights to moves
@@ -26,9 +32,13 @@ export class Learner {
 					.map((move) => {
 						return {
 							move,
-							likely: this.brain.run(Converter.normalizeMove(move, board))
+							likely: currentBrain.run(Converter.normalizeMove(move, board))
 						};
+					})
+					.sort((a, b) => {
+						return b.likely[0] - a.likely[0];
 					});
+			return moveWeights[0].move;
 		}
 	}
 }
@@ -46,33 +56,23 @@ export class Generator {
 
 		// Filter out illegal moves
 		const legalMoves = moves.filter((move) => {
-			return !board.moves.includes(move);
+			return board.isValidMove(move);
 		});
 
 		return legalMoves;
 	}
 
-	public static randomMove(board: Board) {
-		return Generator.randomItem(Generator.possibleMoves(board));
-	}
-
 	public static randomItem(array) {
 		return array[Math.floor(Math.random() * array.length)];
-	}
-
-	private static getRandomInt(min: number, max: number) {
-		return Math.floor(Math.random() * (max - min + 1)) + min;
 	}
 }
 
 class Converter {
-	public static labelMoves(board: Board) {
-		return board.moves.map((move) => {
-			return {
-				input: Converter.normalizeMove(move, board),
-				output: move.p === board.winner ? [1] : [0]
-			};
-		});
+	public static labelMoves(board: Board, p: Player) {
+		return {
+			input: board.toPropertiesObject(),
+			output: (board.winner === p) ? [1] : [0]
+		};
 	}
 
 	public static normalizeMove(move: Move, board: Board) {

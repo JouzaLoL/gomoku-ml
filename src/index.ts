@@ -3,7 +3,10 @@ import "./index.css";
 import "./img/circle.svg";
 import "./img/cross.svg";
 
+import * as flatten from "array-flatten";
+import { cartesianProduct } from "js-combinatorics";
 import * as Vector from "victor";
+// tslint:disable-next-line:interface-name
 interface Vector { x: number; y: number; }
 Vector.prototype.absVector = function () {
 	const [x, y] = [this.x, this.y].map(Math.abs);
@@ -45,6 +48,13 @@ export class Board {
 		this.onMoveAdded = () => false;
 	}
 
+	public restart(p: Player) {
+		this.moves = [];
+		this.currentPlayer = p;
+		this.winner = undefined;
+		this.winningMoves = [];
+	}
+
 	public toJSON() {
 		return JSON.stringify({
 			moves: this.moves,
@@ -59,28 +69,58 @@ export class Board {
 		};
 	}
 
-	public addMove(m) {
-		// Update the current player
-		const cp = this.currentPlayer;
-		this.currentPlayer = this.currentPlayer === Player.X ? Player.O : Player.X;
+	public toBinary() {
+		const arr = Array(this.size).fill(Array(this.size));
+		this.moves.forEach((move) => {
+			arr[move.x][move.y] = move.p === Player.X ? 1 : 0;
+		});
 
+		return flatten(arr);
+	}
+
+	public toPropertiesObject() {
+		const object = {};
+		const coordsRange: number[] = Array.apply(null, { length: this.size }).map(Number.call, Number);
+
+		// Initialize object with empty indicators - 0.5
+		const coords = cartesianProduct(coordsRange, coordsRange)
+			.toArray()
+			.map((coord) => {
+				return coord.join("");
+			})
+			.forEach((coord) => {
+				object[coord] = 0.5;
+			});
+
+		// Add move values to object
+		this.moves.forEach((move) => {
+			object[move.x.toString() + move.y] = move.playerValue;
+		});
+
+		return object;
+	}
+
+	public isValidMove(m: Move) {
+		return !this.moves.some((move) => move.x === m.x && move.y === m.y) && !!m && m.p === this.currentPlayer;
+	}
+
+	public addMove(m: Move) {
 		// Don't mark already occupied col
-		if (
-			this.moves.some((move) => move.x === m.x && move.y === m.y)
-		) {
+		if (!this.isValidMove(m)) {
 			return;
 		} else if (this.winner) {
 			return;
 		}
+
+		// Update the current player
+		const cp = this.currentPlayer;
+		this.currentPlayer = this.currentPlayer === Player.X ? Player.O : Player.X;
 
 		// Add move to collection
 		this.moves.push(m);
 
 		// Determine win
 		this.checkWin(m);
-
-		// Log the move
-		console.log(`Player ${this.currentPlayer} clicked ${m.x}:${m.y}`);
 
 		// Fire event
 		this.onMoveAdded(m);
@@ -147,6 +187,7 @@ export class Board {
 		if (hasWon) {
 			this.winner = p;
 			this.winningMoves = winningMoves;
+			this.onWin();
 			return true;
 		}
 
@@ -229,6 +270,9 @@ export class Board {
 	}
 
 	private checkWinRecursive() {
+		if (!this.moves.length) {
+			return;
+		}
 		for (const move of this.moves) {
 			if (this.checkWin(move)) {
 				break;
@@ -247,6 +291,9 @@ export class Move {
 	public x: number;
 	public y: number;
 	public p: Player;
+	public get playerValue() {
+		return this.p === Player.X ? 1 : 0;
+	}
 	constructor(x: string, y: string, p = Player.X) {
 		this.x = parseInt(x, 10);
 		this.y = parseInt(y, 10);
@@ -258,6 +305,7 @@ class App {
 	public onBoardLoaded: (board: Board) => void;
 	public onBoardSaved: (board: Board) => void;
 	public onRenderComplete: () => void;
+	public onGameEnd: () => void;
 	public board: Board;
 	private target: any;
 	private key: string;
@@ -270,20 +318,22 @@ class App {
 		// First render
 		this.render();
 
+		// Init events
+		this.onRenderComplete = () => false;
+		this.onBoardLoaded = () => this.render();
+		this.onBoardSaved = () => false;
+		this.onGameEnd = () => false;
+
 		// Auto save on game end
 		this.board.onWin = async () => {
 			await this.saveCurrentBoard(new Date().toJSON());
 			await this.render();
+			this.onGameEnd();
 		};
 
 		this.board.onMoveAdded = () => {
 			this.render();
 		};
-
-		// Init events
-		this.onRenderComplete = () => false;
-		this.onBoardLoaded = () => this.render();
-		this.onBoardSaved = () => false;
 	}
 
 	public async render() {
@@ -383,7 +433,7 @@ class App {
 			.querySelector("#console")
 			.addEventListener("keyup", (e) => {
 				// Enter key was pressed
-				if (e.keyCode === 13) {
+				if ((e as KeyboardEvent).keyCode === 13) {
 					const command = (e.target as HTMLInputElement).value;
 					// tslint:disable-next-line:no-eval
 					eval(command);
@@ -426,20 +476,35 @@ class App {
 class SelfPlayer {
 	private app: App;
 	private ai: Learner;
+	private lastPlayer: Player;
 	constructor(app: App) {
+		this.lastPlayer = Player.X;
 		this.app = app;
 		this.ai = new Learner();
+		this.app.onGameEnd = async () => {
+			await this.ai.train(this.app.board);
+			const nextPlayer = this.lastPlayer === Player.X ? Player.O : Player.X;
+			this.app.board.restart(nextPlayer);
+			this.lastPlayer = nextPlayer;
+			await this.app.render();
+		};
 	}
 
 	public play() {
 		const nextMove = this.ai.nextMove(this.app.board);
-		this.app.board.addMove(nextMove);
+		if (!this.app.board.isValidMove(nextMove)) {
+			this.play();
+		} else {
+			this.app.board.addMove(nextMove);
+		}
 	}
 
 	public playOnRenderComplete() {
 		this.app.onRenderComplete = () => {
 			if (!this.app.board.winner || this.app.board.moves.length === Math.pow(this.app.board.size, 2) - 1) {
 				this.play();
+			} else {
+				console.log("end");
 			}
 		};
 	}
@@ -447,3 +512,6 @@ class SelfPlayer {
 
 const appI = new App("#app", new Board(16));
 const selfPlayer = new SelfPlayer(appI);
+
+selfPlayer.playOnRenderComplete();
+selfPlayer.play();

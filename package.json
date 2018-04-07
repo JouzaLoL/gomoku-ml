@@ -32,6 +32,7 @@
 	"dependencies": {
 		"@tensorflow/tfjs": "^0.7.0",
 		"almost-equal": "^1.1.0",
+		"array-flatten": "^2.1.1",
 		"brain.js": "^1.1.2",
 		"dtsmake": "0.0.10",
 		"eslint": "^4.19.1",

@@ -9,6 +9,7 @@
 			"esnext",
 			"dom",
 			"dom.iterable"
-		]
+		],
+		"target": "esnext"
 	}
 }
