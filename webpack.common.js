@@ -4,7 +4,7 @@ require('ts-loader');
 
 module.exports = {
 	entry: {
-		"index": "./src/index.js"
+		"index": "./src/index.ts"
 	},
 	devtool: "source-map",
 	output: {

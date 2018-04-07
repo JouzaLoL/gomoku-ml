@@ -29,6 +29,7 @@
 	"author": "Josef Vacek",
 	"license": "MIT",
 	"dependencies": {
+		"@tensorflow/tfjs": "^0.7.0",
 		"brain.js": "^1.1.2",
 		"dtsmake": "0.0.10",
 		"eslint": "^4.19.1",

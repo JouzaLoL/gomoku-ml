@@ -1,9 +1,9 @@
-import './index.html';
+import "./index.html";
 import "./index.css";
 import "./img/circle.svg";
 import "./img/cross.svg";
 
-import Vector from "victor";
+import * as Vector from "victor";
 Vector.prototype.absVector = function () {
 	const [x, y] = [this.x, this.y].map(Math.abs);
 	return new Vector(x, y);
@@ -14,52 +14,56 @@ Vector.prototype.equals = function (anotherVector) {
 	return this.x === x && this.y === y;
 };
 
-import brain from 'brain.js/src/index';
 import * as localforage from "localforage";
+import Learner from "./ai";
 
-class Board {
-    /**
-     * Creates an instance of Board.
-     * @param {number} size 
-     * @memberof Board
-     */
-	constructor(size = 16, startingPlayer = "x") {
+export enum Player {
+	O = "o",
+	X = "x"
+}
+
+export class Board {
+	public moves: Move[];
+	public size: number;
+	public winner: Player;
+	public currentPlayer: Player;
+	public name: string;
+	public onWin: (p: Player) => void;
+	constructor(size = 16, startingPlayer = Player.X) {
 		this.moves = [];
 		this.size = size;
 		this.winner = undefined;
 		this.currentPlayer = startingPlayer;
-		this.name = "";
 
 		// Win callback
-		this.onWin = () => { };
+		this.onWin = () => false;
 	}
 
-	toJSON() {
+	public toJSON() {
 		return JSON.stringify({
 			moves: this.moves,
 			winner: this.winner
 		});
 	}
 
-	toObject() {
+	public toObject() {
 		return {
 			moves: this.moves,
 			winner: this.winner
 		};
 	}
 
-	addMove(m) {
+	public addMove(m) {
 		// Update the current player
 		const cp = this.currentPlayer;
-		this.currentPlayer = this.currentPlayer === "x" ? "o" : "x";
+		this.currentPlayer = this.currentPlayer === Player.X ? Player.O : Player.X;
 
 		// Don't mark already occupied col
 		if (
 			this.moves.some((move) => move.x === m.x && move.y === m.y)
 		) {
 			return;
-		} // Freeze if game ended
-		else if (this.winner) {
+		} else if (this.winner) {
 			return;
 		}
 
@@ -73,7 +77,7 @@ class Board {
 		console.log(`Player ${this.currentPlayer} clicked ${m.x}:${m.y}`);
 	}
 
-	checkWin(lastMove = this.moves[this.moves.size]) {
+	public checkWin(lastMove = this.moves[this.moves.length - 1]) {
 		const { x, y, p } = lastMove;
 
 		const ownMoves = this.moves
@@ -87,10 +91,10 @@ class Board {
 		const n = 5;
 		const distance = n - 1;
 
-		// find points in distance n or sqrt(2)n to point
+		// Find points in distance n or sqrt(2)n to point
 		const thisVector = new Vector(x, y);
 
-		// convert own moves to vectors
+		// Convert own moves to vectors
 		const ownVectors = ownMoves
 			.map((move) => {
 				return new Vector(move.x, move.y);
@@ -136,11 +140,11 @@ class Board {
 		}
 	}
 
-	render() {
+	public render() {
 		return this.renderBoard().concat(this.renderStats());
 	}
 
-	renderStats() {
+	public renderStats() {
 		return `
         <div id="stats">
             <div class="cp">
@@ -152,12 +156,13 @@ class Board {
             <thead>
                 <th>#</th>
                 <th>Player</th>
+
                 <th>Coords</th>
 			</thead>
 			<tbody>
            ${this.moves.map((move, index) => {
 				return `
-			   <tr class="move ${this.winner === move.p ? "winmove" : ''}">
+			   <tr class="move ${this.winner === move.p ? "winmove" : ""}">
 				   <td class="number">${index}</td>
 				   <td class="player ${move.p}">${move.p}</td>
 				   <td class="coords">[${move.x}, ${move.y}]</td>
@@ -170,15 +175,15 @@ class Board {
     `;
 	}
 
-	renderBoard() {
-		const rows = [...Array(this.size)].map((row, y) => {
-			const cols = [...Array(this.size)].map((col, x) => {
+	public renderBoard() {
+		const rows = new Array(this.size).fill(1).map((row, y) => {
+			const cols = new Array(this.size).fill(1).map((col, x) => {
 				const move = this
 					.moves
-					.find((move) => {
-						return move.x === x && move.y === y;
+					.find((m) => {
+						return m.x === x && m.y === y;
 					});
-				return `<td class="col ${move ? move.p : ''} ${this.winner && move && this.winner === move.p ? "wincol" : ''}" x="${x}" y="${y}"></td>`;
+				return `<td class="col ${move ? move.p : ""} ${this.winner && move && this.winner === move.p ? "wincol" : ""}" x="${x}" y="${y}"></td>`;
 			});
 			return `<tr class="row">${cols.join("")}</tr>`;
 		});
@@ -190,16 +195,21 @@ class Board {
 	}
 }
 
-class Move {
-	constructor(x, y, p = "x") {
-		this.x = parseInt(x);
-		this.y = parseInt(y);
+export class Move {
+	public x: number;
+	public y: number;
+	public p: Player;
+	constructor(x: string, y: string, p = Player.X) {
+		this.x = parseInt(x, 10);
+		this.y = parseInt(y, 10);
 		this.p = p;
 	}
 }
 
-
 class App {
+	public target: any;
+	public board: Board;
+	public key: string;
 	constructor(target, board) {
 		this.target = target;
 		this.board = board;
@@ -212,11 +222,12 @@ class App {
 		// Auto save on game end
 		this.board.onWin = async (player) => {
 			await this.saveCurrentBoard(new Date().toJSON());
-			this.render();
+			await this.render();
+			ai.train(this.board);
 		};
 	}
 
-	async render() {
+	public async render() {
 		let html = "";
 
 		const savedBoards = await this.getSavedBoards() || [];
@@ -245,17 +256,17 @@ class App {
 		this.registerEventHandlers();
 	}
 
-	registerEventHandlers() {
+	public registerEventHandlers() {
 		document.querySelectorAll("td.col").forEach((col) => {
 			col.addEventListener("click", (event) => {
 				onClickCol(event.target, this);
 			});
 		});
 
-		function onClickCol(col, app) {
+		function onClickCol(col, appInstance) {
 			const [x, y] = [col.getAttribute("x"), col.getAttribute("y")];
-			app.board.addMove(new Move(x, y, app.board.currentPlayer));
-			app.render();
+			appInstance.board.addMove(new Move(x, y, appInstance.board.currentPlayer));
+			appInstance.render();
 		}
 
 		// Saving
@@ -263,8 +274,8 @@ class App {
 			.querySelector("#saveButton")
 			.addEventListener("click", async () => {
 				await this.saveCurrentBoard(
-					document
-						.querySelector("#saveName")
+					(document
+						.querySelector("select#saveName") as HTMLSelectElement)
 						.value
 				);
 				this.render();
@@ -274,8 +285,8 @@ class App {
 		document
 			.querySelector("#loadButton")
 			.addEventListener("click", async () => {
-				const value = document
-					.querySelector("select#boards")
+				const value = (document
+					.querySelector("select#boards") as HTMLSelectElement)
 					.value;
 
 				const boards = await this.getSavedBoards();
@@ -290,8 +301,8 @@ class App {
 		document
 			.querySelector("#deleteButton")
 			.addEventListener("click", async () => {
-				const value = document
-					.querySelector("select#boards")
+				const value = (document
+					.querySelector("select#boards") as HTMLSelectElement)
 					.value;
 
 				this.deleteBoard(value);
@@ -299,7 +310,7 @@ class App {
 			});
 	}
 
-	async loadBoard(board) {
+	public async loadBoard(board) {
 		this.board = Object.assign(new Board(), {
 			...board,
 			moves: [
@@ -309,28 +320,27 @@ class App {
 			]
 		});
 		await this.render();
-		const lastMove = this.board.moves[this.board.moves.length - 1];
-		this.board.checkWin(lastMove.x, lastMove.y, lastMove.p);
+		ai.train(this.board);
 	}
 
-	async saveCurrentBoard(name) {
+	public async saveCurrentBoard(name) {
 		const savedBoards = await localforage.getItem(this.key) || [];
 		const boardToSave = Object.assign(this.board.toObject(), { name });
-		await localforage.setItem(this.key, [...savedBoards, boardToSave]);
+		await localforage.setItem(this.key, [...savedBoards as Board[], boardToSave]);
 	}
 
-	async deleteBoard(name) {
-		const savedBoards = await localforage.getItem(this.key) || [];
+	public async deleteBoard(name) {
+		const savedBoards = (await localforage.getItem(this.key) as Board[]) || [];
 		const updatedBoards = savedBoards.filter((board) => board.name !== name);
 		await localforage.setItem(this.key, updatedBoards);
 		await this.render();
 	}
 
-	async getSavedBoards() {
-		return await localforage.getItem(this.key);
+	public async getSavedBoards() {
+		return (await localforage.getItem(this.key) as Board[]);
 	}
-
-	// TODO: add saved boards display - table, with option to load or delete
 }
-
+// TODO: normalize nomenclature
+// TODO: extract selectors from HTML Templates to Selectors property
 const app = new App("#app", new Board(16));
+const ai = new Learner();
