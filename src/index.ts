@@ -78,28 +78,6 @@ export class Board {
 		return flatten(arr);
 	}
 
-	public toPropertiesObject() {
-		const object = {};
-		const coordsRange: number[] = Array.apply(null, { length: this.size }).map(Number.call, Number);
-
-		// Initialize object with empty indicators - 0.5
-		const coords = cartesianProduct(coordsRange, coordsRange)
-			.toArray()
-			.map((coord) => {
-				return coord.join("");
-			})
-			.forEach((coord) => {
-				object[coord] = 0.5;
-			});
-
-		// Add move values to object
-		this.moves.forEach((move) => {
-			object[move.x.toString() + move.y] = move.playerValue;
-		});
-
-		return object;
-	}
-
 	public isValidMove(m: Move) {
 		return !this.moves.some((move) => move.x === m.x && move.y === m.y) && !!m && m.p === this.currentPlayer;
 	}
@@ -197,7 +175,7 @@ export class Board {
 			const AtoB = pointA.clone().distance(pointB);
 			const AtoX = pointA.clone().distance(pointBetween);
 			const BtoX = pointB.clone().distance(pointBetween);
-			return aqual(AtoB, AtoX + BtoX);
+			return aqual(AtoB, AtoX + BtoX, 1e-2);
 		}
 	}
 
