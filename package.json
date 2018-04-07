@@ -9,6 +9,7 @@
 		"test-deploy": "gh-pages -d dist -r git@github.com:JouzaLoL/test-site.git -b master"
 	},
 	"devDependencies": {
+		"@types/js-combinatorics": "^0.5.29",
 		"@types/webpack-env": "^1.13.5",
 		"css-loader": "^0.28.11",
 		"eslint-config-google": "^0.9.1",
@@ -30,10 +31,12 @@
 	"license": "MIT",
 	"dependencies": {
 		"@tensorflow/tfjs": "^0.7.0",
+		"almost-equal": "^1.1.0",
 		"brain.js": "^1.1.2",
 		"dtsmake": "0.0.10",
 		"eslint": "^4.19.1",
 		"float-equal": "^1.0.0",
+		"js-combinatorics": "^0.5.3",
 		"localforage": "^1.7.1",
 		"victor": "^1.1.0"
 	}

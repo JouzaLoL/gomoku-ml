@@ -4,6 +4,7 @@ import "./img/circle.svg";
 import "./img/cross.svg";
 
 import * as Vector from "victor";
+interface Vector { x: number; y: number; }
 Vector.prototype.absVector = function () {
 	const [x, y] = [this.x, this.y].map(Math.abs);
 	return new Vector(x, y);
@@ -13,9 +14,11 @@ Vector.prototype.equals = function (anotherVector) {
 	const [x, y] = [anotherVector.x, anotherVector.y];
 	return this.x === x && this.y === y;
 };
+import * as aqual from "almost-equal";
 
 import * as localforage from "localforage";
-import Learner from "./ai";
+import { Learner, Generator } from "./ai";
+import { doc, square } from "@tensorflow/tfjs";
 
 export enum Player {
 	O = "o",
@@ -26,9 +29,11 @@ export class Board {
 	public moves: Move[];
 	public size: number;
 	public winner: Player;
+	public winningMoves: Vector[];
 	public currentPlayer: Player;
 	public name: string;
-	public onWin: (p: Player) => void;
+	public onWin: () => void;
+	public onMoveAdded: (m: Move) => void;
 	constructor(size = 16, startingPlayer = Player.X) {
 		this.moves = [];
 		this.size = size;
@@ -37,6 +42,7 @@ export class Board {
 
 		// Win callback
 		this.onWin = () => false;
+		this.onMoveAdded = () => false;
 	}
 
 	public toJSON() {
@@ -75,9 +81,16 @@ export class Board {
 
 		// Log the move
 		console.log(`Player ${this.currentPlayer} clicked ${m.x}:${m.y}`);
+
+		// Fire event
+		this.onMoveAdded(m);
 	}
 
-	public checkWin(lastMove = this.moves[this.moves.length - 1]) {
+	public checkWin(lastMove?) {
+		if (!lastMove) {
+			this.checkWinRecursive();
+			return;
+		}
 		const { x, y, p } = lastMove;
 
 		const ownMoves = this.moves
@@ -91,8 +104,7 @@ export class Board {
 		const n = 5;
 		const distance = n - 1;
 
-		// Find points in distance n or sqrt(2)n to point
-		const thisVector = new Vector(x, y);
+		const thisVector: Vector = new Vector(x, y);
 
 		// Convert own moves to vectors
 		const ownVectors = ownMoves
@@ -100,13 +112,14 @@ export class Board {
 				return new Vector(move.x, move.y);
 			});
 
-		const vectorsOnSquare = ownVectors
+		// Find points in distance n or sqrt(2)n to point
+		const vectorsOnSquare: Vector[] = ownVectors
 			.filter((vector) => {
 				return (vector.distanceSq(thisVector) === Math.pow(distance, 2)
 					|| vector.distanceSq(thisVector) === 2 * Math.pow(distance, 2));
 			});
 
-		const vectorsInSquare = ownVectors
+		const vectorsInSquare: Vector[] = ownVectors
 			.filter((vector) => {
 				return (vector.distanceSq(thisVector) < Math.pow(distance, 2)
 					|| vector.distanceSq(thisVector) < 2 * Math.pow(distance, 2));
@@ -118,25 +131,32 @@ export class Board {
 				return !vectorsOnSquare.includes(vector);
 			});
 
+		let winningMoves;
 		const hasWon = vectorsOnSquare
 			.some((squareVector) => {
-				return vectorsInSquare
+				const vectorsBetween = vectorsInSquare
 					.filter((vector) => {
 						return isBetween(thisVector, squareVector, vector);
-					})
-					.length === 3;
+					});
+				if (vectorsBetween.length === 3) {
+					winningMoves = [...vectorsBetween, squareVector, thisVector];
+					return true;
+				}
 			});
 
 		if (hasWon) {
 			this.winner = p;
-			this.onWin(p);
+			this.winningMoves = winningMoves;
+			return true;
 		}
 
 		function isBetween(pointA, pointB, pointBetween) {
-			const AtoB = pointA.clone().subtract(pointB);
-			const AtoX = pointA.clone().subtract(pointBetween);
-			const BtoX = pointB.clone().subtract(pointBetween);
-			return AtoB.absVector().equals(AtoX.absVector().add(BtoX.absVector()));
+			const AdivB = pointA.clone().divide(pointB).normalize();
+
+			const AtoB = pointA.clone().distance(pointB);
+			const AtoX = pointA.clone().distance(pointBetween);
+			const BtoX = pointB.clone().distance(pointBetween);
+			return aqual(AtoB, AtoX + BtoX);
 		}
 	}
 
@@ -162,7 +182,7 @@ export class Board {
 			<tbody>
            ${this.moves.map((move, index) => {
 				return `
-			   <tr class="move ${this.winner === move.p ? "winmove" : ""}">
+			   <tr class="move ${this.isWinMove(move) ? "winmove" : ""}">
 				   <td class="number">${index}</td>
 				   <td class="player ${move.p}">${move.p}</td>
 				   <td class="coords">[${move.x}, ${move.y}]</td>
@@ -183,15 +203,43 @@ export class Board {
 					.find((m) => {
 						return m.x === x && m.y === y;
 					});
-				return `<td class="col ${move ? move.p : ""} ${this.winner && move && this.winner === move.p ? "wincol" : ""}" x="${x}" y="${y}"></td>`;
+				const isWinningMove = move && this.isWinMove(move);
+				return `<td class="col ${move ? move.p : ""} ${isWinningMove ? "wincol" : ""}" x="${x}" y="${y}"></td>`;
 			});
-			return `<tr class="row">${cols.join("")}</tr>`;
+			return `
+			<tr class="row">
+				<td class="guide">${y}</td>
+				${cols.join("")}
+			</tr>`;
 		});
 
 		return `
-        <table id="board">
-            ${rows.join("")}
-		 </table>`;
+		<table id="board">
+			<thead>
+			<tr>
+			<th></th>
+				${
+			Array.apply(null, { length: this.size }).map(Number.call, Number).map((col) => {
+				return `<th>${col}</th>`;
+			})}
+		 	 </tr>
+			</thead>
+			${ rows.join("")}
+		</table>`;
+	}
+
+	private checkWinRecursive() {
+		for (const move of this.moves) {
+			if (this.checkWin(move)) {
+				break;
+			}
+		}
+	}
+
+	private isWinMove(move: Move) {
+		return this.winningMoves && this.winningMoves.some((vector) => {
+			return vector.x === move.x && vector.y === move.y;
+		});
 	}
 }
 
@@ -207,9 +255,12 @@ export class Move {
 }
 
 class App {
-	public target: any;
+	public onBoardLoaded: (board: Board) => void;
+	public onBoardSaved: (board: Board) => void;
+	public onRenderComplete: () => void;
 	public board: Board;
-	public key: string;
+	private target: any;
+	private key: string;
 	constructor(target, board) {
 		this.target = target;
 		this.board = board;
@@ -220,11 +271,19 @@ class App {
 		this.render();
 
 		// Auto save on game end
-		this.board.onWin = async (player) => {
+		this.board.onWin = async () => {
 			await this.saveCurrentBoard(new Date().toJSON());
 			await this.render();
-			ai.train(this.board);
 		};
+
+		this.board.onMoveAdded = () => {
+			this.render();
+		};
+
+		// Init events
+		this.onRenderComplete = () => false;
+		this.onBoardLoaded = () => this.render();
+		this.onBoardSaved = () => false;
 	}
 
 	public async render() {
@@ -250,10 +309,17 @@ class App {
 		</div>
 		`;
 
+		html += `
+		<div class="console">
+			<input type="text" name="console" id="console" autocomplete="on">
+		</div>
+		`;
+
 		html += this.board.render();
 
 		document.querySelector(this.target).innerHTML = html;
 		this.registerEventHandlers();
+		this.onRenderComplete();
 	}
 
 	public registerEventHandlers() {
@@ -275,10 +341,11 @@ class App {
 			.addEventListener("click", async () => {
 				await this.saveCurrentBoard(
 					(document
-						.querySelector("select#saveName") as HTMLSelectElement)
+						.querySelector("#saveName") as HTMLSelectElement)
 						.value
 				);
-				this.render();
+				await this.render();
+				this.onBoardSaved(this.board);
 			});
 
 		// Loading
@@ -294,7 +361,9 @@ class App {
 					return b.name === value;
 				});
 
-				this.loadBoard(boardToLoad);
+				await this.loadBoard(boardToLoad);
+				this.board.checkWin();
+				this.onBoardLoaded(this.board);
 			});
 
 		// Deleting
@@ -308,6 +377,18 @@ class App {
 				this.deleteBoard(value);
 				this.render();
 			});
+
+		// Console
+		document
+			.querySelector("#console")
+			.addEventListener("keyup", (e) => {
+				// Enter key was pressed
+				if (e.keyCode === 13) {
+					const command = (e.target as HTMLInputElement).value;
+					// tslint:disable-next-line:no-eval
+					eval(command);
+				}
+			});
 	}
 
 	public async loadBoard(board) {
@@ -320,7 +401,6 @@ class App {
 			]
 		});
 		await this.render();
-		ai.train(this.board);
 	}
 
 	public async saveCurrentBoard(name) {
@@ -342,5 +422,28 @@ class App {
 }
 // TODO: normalize nomenclature
 // TODO: extract selectors from HTML Templates to Selectors property
-const app = new App("#app", new Board(16));
-const ai = new Learner();
+
+class SelfPlayer {
+	private app: App;
+	private ai: Learner;
+	constructor(app: App) {
+		this.app = app;
+		this.ai = new Learner();
+	}
+
+	public play() {
+		const nextMove = this.ai.nextMove(this.app.board);
+		this.app.board.addMove(nextMove);
+	}
+
+	public playOnRenderComplete() {
+		this.app.onRenderComplete = () => {
+			if (!this.app.board.winner || this.app.board.moves.length === Math.pow(this.app.board.size, 2) - 1) {
+				this.play();
+			}
+		};
+	}
+}
+
+const appI = new App("#app", new Board(16));
+const selfPlayer = new SelfPlayer(appI);

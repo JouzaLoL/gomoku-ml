@@ -85,3 +85,13 @@ span.x, td.x {
 span.o, td.o {
     color: red;
 }
+
+/* Controls */
+
+input#console {
+    width: 20rem;
+}
+
+div.console {
+    margin: 10px;
+}
