@@ -109,33 +109,45 @@ export class Board {
 	}
 
 	public checkWinAlt(lastMove?: Move) {
-		// If no last move supplied, check all moves
+		// Nobody can win with less than 5 moves ;)
+		if (this.moves.length < 9) {
+			return false;
+		}
+
+		// If no last move supplied, check for all moves
 		if (!lastMove) {
 			this.checkWinRecursive();
 		}
-		let hasWon = false;
-		const item = lastMove;
-		const deltas = [[1, 0], [0, 1], [1, 1], [1, -1]];
-		deltas.forEach((delta) => {
-			let [delta_row, delta_col] = delta;
-			let consecutive_items = 1;
 
+		// Moves that won the game
+		const winningMoves: Move[] = [];
+
+		let hasWon = false;
+
+		// Delta positions
+		const deltas = [[1, 0], [0, 1], [1, 1], [1, -1]];
+		deltas.forEach((delta1) => {
+			let [deltaRow, deltaCol] = delta1;
+			let consecutiveItems = 1;
 			[1, -1].forEach((delta) => {
-				delta_row *= delta;
-				delta_col *= delta;
-				let next_row = lastMove.x + delta_row
-				let next_col = lastMove.y + delta_col
-				while (0 <= next_row && next_row < this.size && 0 <= next_col && next_col < this.size) {
-					if (this.getMove(next_col, next_row) && this.getMove(next_col, next_row).p === lastMove.p) {
-						consecutive_items += 1;
+				deltaRow *= delta;
+				deltaCol *= delta;
+				let nextRow = lastMove.y + deltaRow;
+				let nextCol = lastMove.x + deltaCol;
+				while (0 <= nextRow && nextRow < this.size && 0 <= nextCol && nextCol < this.size) {
+					if (this.getMove(nextCol, nextRow) && this.getMove(nextCol, nextRow).p === lastMove.p) {
+						consecutiveItems += 1;
+						winningMoves.push(this.getMove(nextCol, nextRow));
+						winningMoves.push(lastMove);
 					} else {
 						break;
 					}
-					if (consecutive_items === 5) {
+					if (consecutiveItems === 5) {
 						hasWon = true;
+						break;
 					}
-					next_row += delta_row;
-					next_col += delta_col;
+					nextRow += deltaRow;
+					nextCol += deltaCol;
 				}
 			});
 		});
@@ -145,81 +157,6 @@ export class Board {
 			this.winningMoves = winningMoves;
 			this.onWin();
 			return true;
-		}
-	}
-
-	public checkWin(lastMove?) {
-		if (!lastMove) {
-			this.checkWinRecursive();
-			return;
-		}
-		const { x, y, p } = lastMove;
-
-		const ownMoves = this.moves
-			.filter((move) => move.p === p);
-
-		if (ownMoves.length < 5) {
-			return;
-		}
-
-		// How many in adjacent are needed to win?
-		const n = 5;
-		const distance = n - 1;
-
-		const thisVector: Vector = new Vector(x, y);
-
-		// Convert own moves to vectors
-		const ownVectors = ownMoves
-			.map((move) => {
-				return new Vector(move.x, move.y);
-			});
-
-		// Find points in distance n or sqrt(2)n to point
-		const vectorsOnSquare: Vector[] = ownVectors
-			.filter((vector) => {
-				return (vector.distanceSq(thisVector) === Math.pow(distance, 2)
-					|| vector.distanceSq(thisVector) === 2 * Math.pow(distance, 2));
-			});
-
-		const vectorsInSquare: Vector[] = ownVectors
-			.filter((vector) => {
-				return (vector.distanceSq(thisVector) < Math.pow(distance, 2)
-					|| vector.distanceSq(thisVector) < 2 * Math.pow(distance, 2));
-			})
-			.filter((vector) => {
-				return !(vector.x === thisVector.x && vector.y === thisVector.y);
-			})
-			.filter((vector) => {
-				return !vectorsOnSquare.includes(vector);
-			});
-
-		let winningMoves;
-		const hasWon = vectorsOnSquare
-			.some((squareVector) => {
-				const vectorsBetween = vectorsInSquare
-					.filter((vector) => {
-						return isBetween(thisVector, squareVector, vector);
-					});
-				if (vectorsBetween.length === 3) {
-					winningMoves = [...vectorsBetween, squareVector, thisVector];
-					return true;
-				}
-			});
-
-		if (hasWon) {
-			this.winner = p;
-			this.winningMoves = winningMoves;
-			this.onWin();
-			return true;
-		}
-
-		function isBetween(pointA, pointB, pointBetween) {
-			const AdivB = pointA.clone().divide(pointB).normalize();
-
-			const AtoB = pointA.clone().distance(pointB);
-			const AtoX = pointA.clone().distance(pointBetween);
-			const BtoX = pointB.clone().distance(pointBetween);
-			return aqual(AtoB, AtoX + BtoX);
 		}
 	}
 
