@@ -20,7 +20,7 @@ Vector.prototype.equals = function (anotherVector) {
 import * as aqual from "almost-equal";
 
 import * as localforage from "localforage";
-import { Learner, Generator } from "./ai";
+import { Learner, Generator, SimSelfPlayer } from "./ai";
 import { doc, square } from "@tensorflow/tfjs";
 
 export enum Player {
@@ -98,10 +98,54 @@ export class Board {
 		this.moves.push(m);
 
 		// Determine win
-		this.checkWin(m);
+		this.checkWinAlt(m);
 
 		// Fire event
 		this.onMoveAdded(m);
+	}
+
+	public getMove(x, y) {
+		return this.moves.find((move) => move.x === x && move.y === y);
+	}
+
+	public checkWinAlt(lastMove?: Move) {
+		// If no last move supplied, check all moves
+		if (!lastMove) {
+			this.checkWinRecursive();
+		}
+		let hasWon = false;
+		const item = lastMove;
+		const deltas = [[1, 0], [0, 1], [1, 1], [1, -1]];
+		deltas.forEach((delta) => {
+			let [delta_row, delta_col] = delta;
+			let consecutive_items = 1;
+
+			[1, -1].forEach((delta) => {
+				delta_row *= delta;
+				delta_col *= delta;
+				let next_row = lastMove.x + delta_row
+				let next_col = lastMove.y + delta_col
+				while (0 <= next_row && next_row < this.size && 0 <= next_col && next_col < this.size) {
+					if (this.getMove(next_col, next_row) && this.getMove(next_col, next_row).p === lastMove.p) {
+						consecutive_items += 1;
+					} else {
+						break;
+					}
+					if (consecutive_items === 5) {
+						hasWon = true;
+					}
+					next_row += delta_row;
+					next_col += delta_col;
+				}
+			});
+		});
+
+		if (hasWon) {
+			this.winner = lastMove.p;
+			this.winningMoves = winningMoves;
+			this.onWin();
+			return true;
+		}
 	}
 
 	public checkWin(lastMove?) {
@@ -175,7 +219,7 @@ export class Board {
 			const AtoB = pointA.clone().distance(pointB);
 			const AtoX = pointA.clone().distance(pointBetween);
 			const BtoX = pointB.clone().distance(pointBetween);
-			return aqual(AtoB, AtoX + BtoX, 1e-2);
+			return aqual(AtoB, AtoX + BtoX);
 		}
 	}
 
@@ -252,7 +296,7 @@ export class Board {
 			return;
 		}
 		for (const move of this.moves) {
-			if (this.checkWin(move)) {
+			if (this.checkWinAlt(move)) {
 				break;
 			}
 		}
@@ -390,7 +434,7 @@ class App {
 				});
 
 				await this.loadBoard(boardToLoad);
-				this.board.checkWin();
+				this.board.checkWinAlt();
 				this.onBoardLoaded(this.board);
 			});
 
@@ -491,5 +535,4 @@ class SelfPlayer {
 const appI = new App("#app", new Board(16));
 const selfPlayer = new SelfPlayer(appI);
 
-selfPlayer.playOnRenderComplete();
-selfPlayer.play();
+const sim = new SimSelfPlayer(new Board(19));
