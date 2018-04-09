@@ -78,12 +78,16 @@ span.cp {
     text-transform: uppercase;
 }
 
-span.x, td.x {
+div.x, td.x {
     color: #2779D9;
 }
 
-span.o, td.o {
+div.o, td.o {
     color: red;
+}
+
+td>div, td>div {
+    font-size: 7px;
 }
 
 /* Controls */

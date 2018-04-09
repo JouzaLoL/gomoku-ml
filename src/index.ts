@@ -17,248 +17,11 @@ Vector.prototype.equals = function (anotherVector) {
 	const [x, y] = [anotherVector.x, anotherVector.y];
 	return this.x === x && this.y === y;
 };
-import * as aqual from "almost-equal";
 
 import * as localforage from "localforage";
-import { Learner, Generator, SimSelfPlayer } from "./ai";
-import { doc, square } from "@tensorflow/tfjs";
+import { Learner, Generator, SelfPlaySim } from "./ai";
 
-export enum Player {
-	O = "o",
-	X = "x"
-}
-
-export class Board {
-	public moves: Move[];
-	public size: number;
-	public winner: Player;
-	public winningMoves: Vector[];
-	public currentPlayer: Player;
-	public name: string;
-	public onWin: () => void;
-	public onMoveAdded: (m: Move) => void;
-	constructor(size = 16, startingPlayer = Player.X) {
-		this.moves = [];
-		this.size = size;
-		this.winner = undefined;
-		this.currentPlayer = startingPlayer;
-
-		// Win callback
-		this.onWin = () => false;
-		this.onMoveAdded = () => false;
-	}
-
-	public restart(p: Player) {
-		this.moves = [];
-		this.currentPlayer = p;
-		this.winner = undefined;
-		this.winningMoves = [];
-	}
-
-	public toJSON() {
-		return JSON.stringify({
-			moves: this.moves,
-			winner: this.winner
-		});
-	}
-
-	public toObject() {
-		return {
-			moves: this.moves,
-			winner: this.winner
-		};
-	}
-
-	public toBinary() {
-		const arr = Array(this.size).fill(Array(this.size));
-		this.moves.forEach((move) => {
-			arr[move.x][move.y] = move.p === Player.X ? 1 : 0;
-		});
-
-		return flatten(arr);
-	}
-
-	public isValidMove(m: Move) {
-		return !this.moves.some((move) => move.x === m.x && move.y === m.y) && !!m && m.p === this.currentPlayer;
-	}
-
-	public addMove(m: Move) {
-		// Don't mark already occupied col
-		if (!this.isValidMove(m)) {
-			return;
-		} else if (this.winner) {
-			return;
-		}
-
-		// Update the current player
-		const cp = this.currentPlayer;
-		this.currentPlayer = this.currentPlayer === Player.X ? Player.O : Player.X;
-
-		// Add move to collection
-		this.moves.push(m);
-
-		// Determine win
-		this.checkWinAlt(m);
-
-		// Fire event
-		this.onMoveAdded(m);
-	}
-
-	public getMove(x, y) {
-		return this.moves.find((move) => move.x === x && move.y === y);
-	}
-
-	public checkWinAlt(lastMove?: Move) {
-		// Nobody can win with less than 5 moves ;)
-		if (this.moves.length < 9) {
-			return false;
-		}
-
-		// If no last move supplied, check for all moves
-		if (!lastMove) {
-			this.checkWinRecursive();
-		}
-
-		// Moves that won the game
-		const winningMoves: Move[] = [];
-
-		let hasWon = false;
-
-		// Delta positions
-		const deltas = [[1, 0], [0, 1], [1, 1], [1, -1]];
-		deltas.forEach((delta1) => {
-			let [deltaRow, deltaCol] = delta1;
-			let consecutiveItems = 1;
-			[1, -1].forEach((delta) => {
-				deltaRow *= delta;
-				deltaCol *= delta;
-				let nextRow = lastMove.y + deltaRow;
-				let nextCol = lastMove.x + deltaCol;
-				while (0 <= nextRow && nextRow < this.size && 0 <= nextCol && nextCol < this.size) {
-					if (this.getMove(nextCol, nextRow) && this.getMove(nextCol, nextRow).p === lastMove.p) {
-						consecutiveItems += 1;
-						winningMoves.push(this.getMove(nextCol, nextRow));
-						winningMoves.push(lastMove);
-					} else {
-						break;
-					}
-					if (consecutiveItems === 5) {
-						hasWon = true;
-						break;
-					}
-					nextRow += deltaRow;
-					nextCol += deltaCol;
-				}
-			});
-		});
-
-		if (hasWon) {
-			this.winner = lastMove.p;
-			this.winningMoves = winningMoves;
-			this.onWin();
-			return true;
-		}
-	}
-
-	public render() {
-		return this.renderBoard().concat(this.renderStats());
-	}
-
-	public renderStats() {
-		return `
-        <div id="stats">
-            <div class="cp">
-                <b>Current player:</b>
-                <span class="cp ${this.currentPlayer}">${this.currentPlayer}</span>
-			</div>
-            <b>Moves:</b>
-        	<table class="moves">
-            <thead>
-                <th>#</th>
-                <th>Player</th>
-
-                <th>Coords</th>
-			</thead>
-			<tbody>
-           ${this.moves.map((move, index) => {
-				return `
-			   <tr class="move ${this.isWinMove(move) ? "winmove" : ""}">
-				   <td class="number">${index}</td>
-				   <td class="player ${move.p}">${move.p}</td>
-				   <td class="coords">[${move.x}, ${move.y}]</td>
-			   </tr>
-		   `;
-			})}
-			</tbody>
-        </table>
-		</div>
-    `;
-	}
-
-	public renderBoard() {
-		const rows = new Array(this.size).fill(1).map((row, y) => {
-			const cols = new Array(this.size).fill(1).map((col, x) => {
-				const move = this
-					.moves
-					.find((m) => {
-						return m.x === x && m.y === y;
-					});
-				const isWinningMove = move && this.isWinMove(move);
-				return `<td class="col ${move ? move.p : ""} ${isWinningMove ? "wincol" : ""}" x="${x}" y="${y}"></td>`;
-			});
-			return `
-			<tr class="row">
-				<td class="guide">${y}</td>
-				${cols.join("")}
-			</tr>`;
-		});
-
-		return `
-		<table id="board">
-			<thead>
-			<tr>
-			<th></th>
-				${
-			Array.apply(null, { length: this.size }).map(Number.call, Number).map((col) => {
-				return `<th>${col}</th>`;
-			})}
-		 	 </tr>
-			</thead>
-			${ rows.join("")}
-		</table>`;
-	}
-
-	private checkWinRecursive() {
-		if (!this.moves.length) {
-			return;
-		}
-		for (const move of this.moves) {
-			if (this.checkWinAlt(move)) {
-				break;
-			}
-		}
-	}
-
-	private isWinMove(move: Move) {
-		return this.winningMoves && this.winningMoves.some((vector) => {
-			return vector.x === move.x && vector.y === move.y;
-		});
-	}
-}
-
-export class Move {
-	public x: number;
-	public y: number;
-	public p: Player;
-	public get playerValue() {
-		return this.p === Player.X ? 1 : 0;
-	}
-	constructor(x: string, y: string, p = Player.X) {
-		this.x = parseInt(x, 10);
-		this.y = parseInt(y, 10);
-		this.p = p;
-	}
-}
+import { Board, Move, Player } from "./lib";
 
 class App {
 	public onBoardLoaded: (board: Board) => void;
@@ -371,7 +134,7 @@ class App {
 				});
 
 				await this.loadBoard(boardToLoad);
-				this.board.checkWinAlt();
+				this.board.checkWin();
 				this.onBoardLoaded(this.board);
 			});
 
@@ -390,12 +153,21 @@ class App {
 		// Console
 		document
 			.querySelector("#console")
-			.addEventListener("keyup", (e) => {
+			.addEventListener("keyup", async (e) => {
 				// Enter key was pressed
 				if ((e as KeyboardEvent).keyCode === 13) {
 					const command = (e.target as HTMLInputElement).value;
+					if (command === "dl") {
+						downloadObjectAsJson(await this.getSavedBoards(), "games");
+						return;
+					}
 					// tslint:disable-next-line:no-eval
 					eval(command);
+				}
+
+				async function downloadObjectAsJson(exportObj, exportName) {
+					const s = JSON.stringify(exportObj);
+					const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj));
 				}
 			});
 	}
@@ -436,40 +208,77 @@ class SelfPlayer {
 	private app: App;
 	private ai: Learner;
 	private lastPlayer: Player;
+	private humanPlayed: number;
+	private stats: {
+		x: number;
+		o: number
+		games: number;
+		draw: number;
+	};
 	constructor(app: App) {
 		this.lastPlayer = Player.X;
 		this.app = app;
 		this.ai = new Learner();
+		this.stats = { x: 0, o: 0, games: 0, draw: 0 };
+		this.humanPlayed = 0;
+		this.app.board.onMoveAdded = () => {
+			this.humanPlayed++;
+		};
 		this.app.onGameEnd = async () => {
+			this.stats.games++;
+			switch (this.app.board.winner) {
+				case Player.X:
+					this.stats.x++;
+					break;
+				case Player.O:
+					this.stats.o++;
+					break;
+				case undefined:
+					this.stats.draw++;
+					break;
+				default:
+					break;
+			}
 			await this.ai.train(this.app.board);
 			const nextPlayer = this.lastPlayer === Player.X ? Player.O : Player.X;
 			this.app.board.restart(nextPlayer);
 			this.lastPlayer = nextPlayer;
 			await this.app.render();
+			console.log(JSON.stringify(this.stats));
 		};
 	}
 
 	public play() {
-		const nextMove = this.ai.nextMove(this.app.board);
+		const moveWeights = this.ai.getBestMoves(this.app.board);
+		const nextMove = moveWeights[0].move;
+		if (nextMove === undefined) {
+			console.log("Draw");
+			this.app.onGameEnd();
+			return;
+		}
 		if (!this.app.board.isValidMove(nextMove)) {
 			this.play();
 		} else {
 			this.app.board.addMove(nextMove);
+			this.app.board.moveWeights = moveWeights;
 		}
 	}
 
 	public playOnRenderComplete() {
 		this.app.onRenderComplete = () => {
-			if (!this.app.board.winner || this.app.board.moves.length === Math.pow(this.app.board.size, 2) - 1) {
+			if (this.humanPlayed % 2) {
+				return;
+			}
+			if (!this.app.board.winner || this.app.board.moves.length < Math.pow(this.app.board.size, 2)) {
 				this.play();
-			} else {
-				console.log("end");
 			}
 		};
 	}
 }
 
-const appI = new App("#app", new Board(16));
-const selfPlayer = new SelfPlayer(appI);
+// const appI = new App("#app", new Board(5, Player.X, 4));
+// const selfPlayer = new SelfPlayer(appI);
+// selfPlayer.playOnRenderComplete();
 
-const sim = new SimSelfPlayer(new Board(19));
+const sim = new SelfPlaySim(new Board(3, Player.O, 3));
+sim.startAutoPlay();
