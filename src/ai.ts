@@ -1,15 +1,15 @@
 import * as tf from "@tensorflow/tfjs";
-import brain from "brain.js/src/index";
-import { cartesianProduct } from "js-combinatorics";
+import * as brain from "brain.js";
+import { cartesianProduct, baseN } from "js-combinatorics";
 
-import { Move, Player, Board } from "./index";
+import { Move, Player, Board } from "./lib";
 import { TimeDistributed } from "@tensorflow/tfjs-layers/dist/layers/wrappers";
 
 export class Learner {
 	private brain: any;
 	constructor() {
 		const options = {
-			hiddenLayers: [9, 9],
+			hiddenLayers: [15, 15],
 			learningRate: 0.3,
 			iterations: 20000,
 			errorThresh: 0.005,
@@ -23,14 +23,14 @@ export class Learner {
 		this.brain = new brain.NeuralNetwork(options);
 	}
 
-	public async train(board: Board) {
-		const trainingData = Converter.labelGame(board);
-		await this.brain.trainAsync(trainingData);
+	public train(board: Board) {
+		const trainingData = Converter.labelGame(board.moves, board.winner, board.size);
+		return this.brain.trainAsync(trainingData);
 	}
 
 	public getBestMoves(board: Board): Array<{
 		move: Move,
-		likely: any
+		likely: [number]
 	}> {
 		const possibleMoves = Generator
 			.possibleMoves(board);
@@ -51,19 +51,18 @@ export class Learner {
 					.map((move) => {
 						// Add the next move to the state, creating S_t+1
 						const newMoves = moves.concat([move]);
-						// Actual S_t+1
 						const newState = Converter.toPropertiesObject(newMoves, board.size);
 						// Return the move and it's weight
 						return {
 							move,
-							likely: this.brain.run(newState)[board.currentPlayer]
+							likely: this.brain.run(newState)
 						};
 					});
 
 			// Sort the moves by descending weight
 			const bestMoves = weightedMoves
 				.sort((a, b) => {
-					return b.likely - a.likely;
+					return a.move.playerValue ? b.likely[0] - a.likely[0] : a.likely[0] - b.likely[0];
 				});
 
 			// Return the sorted array
@@ -91,7 +90,7 @@ export class Generator {
 			});
 
 		// Filter out illegal moves
-		const legalMoves = moves.filter(board.isValidMove);
+		const legalMoves = moves.filter((move) => board.isValidMove(move));
 
 		return legalMoves;
 	}
@@ -117,18 +116,29 @@ class Converter {
 	 * @param {Board} board
 	 * @memberof Converter
 	 */
-	public static labelGame(board: Board) {
+	public static labelGame(moves: Move[], winner: Player, size: number) {
 		// Discount the game by moves count
-		const discount = (board.moves.filter((move) => move.p === board.winner).length - 1 / board.winSize) * 0.1;
+		// const discount = (moves.filter((move) => move.p === winner).length - 1 / winSize) * 0.1;
 
 		// Value >> 1 => Player.X is likely to win; Value >> 0 => Player.O is likely to win
-		const value = board.winner === Player.X ? 1 - discount : 0 + discount;
+		let value;
+		switch (winner) {
+			case Player.X:
+				value = 1;
+				break;
+			case Player.O:
+				value = 0;
+				break;
+			case undefined:
+				value = 0.5;
+				break;
+			default:
+				break;
+		}
 
 		return {
-			input: Converter.toPropertiesObject(board.moves, board.size),
-			output: {
-				win: value
-			}
+			input: Converter.toPropertiesObject(moves, size),
+			output: [value]
 		};
 	}
 
@@ -146,7 +156,7 @@ class Converter {
 		// Generate a range of [0, length]
 		const coordsRange: number[] = Array.apply(null, { length: size }).map(Number.call, Number);
 
-		/* // Initialize object with empty indicators - 0.5
+		// Initialize object with empty indicators - 0.5
 		baseN(coordsRange, 2)
 			.toArray()
 			.map((coord) => {
@@ -154,7 +164,7 @@ class Converter {
 			})
 			.forEach((coord) => {
 				object[coord] = 0.5;
-			}); */
+			});
 
 		// Add move values to object
 		moves.forEach((move) => {
@@ -169,6 +179,11 @@ export class SelfPlaySim {
 	private board: Board;
 	private ai: Learner;
 	private lastPlayer: Player;
+	get nextPlayer(): Player {
+		const nextPlayer = this.lastPlayer === Player.X ? Player.O : Player.X;
+		this.lastPlayer = this.lastPlayer === Player.X ? Player.O : Player.X;
+		return nextPlayer;
+	}
 	private stats: {
 		x: number;
 		o: number
@@ -186,6 +201,7 @@ export class SelfPlaySim {
 				return this.x / this.o;
 			}
 		};
+
 		this.lastPlayer = Player.X;
 		this.board = board;
 		this.ai = new Learner();
@@ -205,11 +221,10 @@ export class SelfPlaySim {
 			this.stats.draw++;
 
 			// Begin new game
-			this.board.restart(this.lastPlayer);
-			this.play();
+			this.board.restart(this.nextPlayer);
 			return;
 		}
-		console.log(`Player: ${nextMove.move.p} | Likely: ${nextMove.likely}`);
+		// console.log(`Player: ${nextMove.move.p} | Likely: ${nextMove.likely ? nextMove.likely[0] : "random"}`);
 		this.board.addMove(nextMove.move);
 	}
 
@@ -223,30 +238,27 @@ export class SelfPlaySim {
 				case Player.O:
 					this.stats.o++;
 					break;
-				case undefined:
-					this.stats.draw++;
-					break;
 				default:
 					break;
 			}
-			console.log(`Game ended | Winner: ${this.board.winner}`);
-			console.log("Stats:" + JSON.stringify(this.stats));
+			console.log(`X Winrate: ${(this.stats.x / this.stats.games * 100).toFixed(2)}% | Games: ${this.stats.games} | Draws: ${this.stats.draw}`);
 
 			// Train the network
 			await this.ai.train(this.board);
 
-			// Switch out first player
-			const nextPlayer = this.lastPlayer === Player.X ? Player.O : Player.X;
-			this.lastPlayer = nextPlayer;
-
 			// Begin new game
-			this.board.restart(nextPlayer);
+			this.board.restart(this.nextPlayer);
 			this.play();
 		};
 
 		// Actual autoplay
-		this.board.onMoveAdded = () => {
-			this.play();
+		this.board.onMoveAdded = (m) => {
+			if (this.board.moves.length < this.board.size ** 2) {
+				this.play();
+			} else {
+				// Game is a draw, end it via onWin
+				this.board.onWin();
+			}
 		};
 
 		// Start the autoplay
